@@ -116,12 +116,10 @@ class Region:
         self.err = np.ones((4), dtype=np.float64)
         for i in range(4):
             self.err_lst.append([])
-        self.xm = np.zeros(np.shape(self.bm), dtype=np.float64)
-        self.xx = np.zeros(np.shape(self.bx), dtype=np.float64)
-        self.xy = np.zeros(np.shape(self.by), dtype=np.float64)
-        self.xh = np.zeros(np.shape(self.bh), dtype=np.float64)
-        # for i, cell in enumerate(self.cells):
-        #     self.x[i, 0] = self.cells[i].T
+        self.xm = np.ones(np.shape(self.bm), dtype=np.float64)
+        self.xx = np.ones(np.shape(self.bx), dtype=np.float64)
+        self.xy = np.ones(np.shape(self.by), dtype=np.float64)
+        self.xh = np.ones(np.shape(self.bh), dtype=np.float64)
 
         for iter in range(max_iter):
             if np.max(self.err) <= tol: break
@@ -136,24 +134,31 @@ class Region:
                 self.by[i, 0] = 0.
                 self.bh[i, 0] = 0.
                 for j, (edge, idx_n) in enumerate(zip(cell.edge, cell.neighbour_id)):
-                    edge.U = (edge.N2.U + edge.N1.U) / 2
-                    # if idx_n == -1:
-                    #     # D: float = cell.neighbour[j].k * edge.L / (3 ** .5 / 2) * 2 # diffusion coefficient
-                    #     # self.b[i, 0] = self.b[i, 0] + D * cell.neighbour[j].T
-                    #     pass
-                    #     F = 0
-                    # else:
-                    #     # D: float = cell.neighbour[j].k * edge.L / (3 ** .5 / 2) # diffusion coefficient
-                    #     # self.A[i, idx_n] = -D # left side coefficient
+
+                    dT: np.ndarray = np.asarray([(cell.T - cell.neighbour[j].T) / (cell.centr - cell.neighbour[j].centr)], dtype=np.float64)
+
                     F: float = (cell.rho + cell.neighbour[j].rho) / 2 * np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L # mass conservation
-                    # print(np.dot(edge.unit_normal.flatten(), edge.U.flatten()))
-                    p: np.ndarray = -(cell.p + cell.neighbour[j].p) / 2 * edge.unit_normal * edge.L # p * n_ * L
-                    self.Am[i, i] = self.Am[i, i] + F # add to diagonal
-                    self.Ax[i, i] = self.Ax[i, i] + F # add to diagonal
-                    self.Ay[i, i] = self.Ay[i, i] + F # add to diagonal
-                    self.Ah[i, i] = self.Ah[i, i] + F # add to diagonal
-                    self.bx[i, 0] = self.bx[i, 0] + p[0, 0] # add to source (right side)
-                    self.by[i, 0] = self.by[i, 0] + p[1, 0] # add to source
+                    dp: np.ndarray = -(cell.p + cell.neighbour[j].p) / 2 * edge.unit_normal * edge.L # p * n_ * L
+                    dpe: float = -(cell.p + cell.neighbour[j].p) / 2 * np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L
+                    dte: float = cell.k * np.dot(edge.unit_normal.flatten(), dT) * edge.L
+
+                    if idx_n == -1:
+                        pass # TODO
+
+                    else:
+                        self.Am[i, idx_n] = -F
+                        self.Ax[i, idx_n] = -F
+                        self.Ay[i, idx_n] = -F
+                        self.Ah[i, idx_n] = -F
+
+                    self.Am[i, i] = self.Am[i, i] + F
+                    self.Ax[i, i] = self.Ax[i, i] + F
+                    self.Ay[i, i] = self.Ay[i, i] + F
+                    self.Ah[i, i] = self.Ah[i, i] + F
+                    
+                    self.bx[i, 0] = self.bx[i, 0] + dp[0, 0]
+                    self.by[i, 0] = self.by[i, 0] + dp[1, 0]
+                    self.bh[i, 0] = self.bh[i, 0] + dpe + dte
             
             fc.gauss_seidel_step(self.Am, self.bm, self.xm, self.errm)
             self.err_lst[0].append(self.errm[0])
@@ -167,9 +172,15 @@ class Region:
             self.err = np.asarray([self.errm[0], self.errx[0], self.erry[0], self.errh[0]])
             
             for i, cell in enumerate(self.cells):
-                self.cells[i].p
-                self.cells[i].T
-                self.cells[i].p = self.xx[i, 0] # TODO
+                cell.rho = self.bm[i, 0]
+                cell.T = self.xh[i, 0] / (cell.cp - cell.R) / cell.rho
+                cell.p = cell.rho * cell.T * cell.R
+                for j, (edge, idx_n) in enumerate(zip(cell.edge, cell.neighbour_id)):
+                    if idx_n == -1:
+                        pass # TODO
+                    else:
+                        self.cells[i].edge[j].U[0, 0] = (self.xx[i, 0] / self.xm[i, 0] + self.xx[idx_n, 0] / self.xm[idx_n, 0]) / 2
+                        self.cells[i].edge[j].U[1, 0] = (self.xy[i, 0] / self.xm[i, 0] + self.xy[idx_n, 0] / self.xm[idx_n, 0]) / 2
 
             print(f"[{iter+1}] : {self.err[0]:.3e} [K]")
 

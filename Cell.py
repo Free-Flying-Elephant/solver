@@ -20,8 +20,6 @@ class Cell:
 
     neighbour: list[Cell] = field(default_factory=lambda: [])
     neighbour_id: list[int] = field(default_factory=lambda: [])
-    div_U: float = 0
-    mom_err: np.ndarray = field(default_factory=lambda: np.ones((2, 1), dtype=np.float64))
 
     p: float = 0
     T: float = 300
