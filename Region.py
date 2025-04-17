@@ -189,7 +189,6 @@ class Region:
             
 
 
-
 if __name__ == "__main__":
 
     palette: list[str] = ["tab:blue", "tab:orange", "tab:red", "tab:green", "tab:purple", "tab:pink", "tab:brown"] * 10
@@ -258,8 +257,8 @@ if __name__ == "__main__":
     bc_cells[1].p = 100000
     
     mesh.assign_neighbours()
-    # conv: bool = mesh.iterate_temp_solid(1e-3, 100)
-    conv: bool = mesh.iterate_ico(1e-3, 100)
+    conv: bool = mesh.iterate_temp_solid(1e-3, 100)
+    # conv: bool = mesh.iterate_ico(1e-3, 100)
     print(f"Converged: {conv}")
     mesh.plot()
 
