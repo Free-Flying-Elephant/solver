@@ -5,6 +5,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 import func as fc
+import iofc
 
 from Cell import Cell
 from Node import Node
@@ -38,6 +39,7 @@ class Region:
         self.xh: np.ndarray = np.zeros((2, 1), dtype=np.float64)
 
     def plot(self) -> None:
+        palette: list[str] = ["tab:blue", "tab:orange", "tab:red", "tab:green", "tab:purple", "tab:pink", "tab:brown"] * 10
         plt.figure("error")
         plt.plot(self.err_seq)
         plt.yscale("log")
@@ -59,7 +61,7 @@ class Region:
         plt.axis("equal")
         plt.show()
 
-    def assign_neighbours(self) -> None:
+    def assign_neighbours(self, bc_cells: list[Cell]) -> None:
 
         for i, cell in enumerate(self.cells):
             for j, edge in enumerate(cell.edge):
@@ -143,6 +145,9 @@ class Region:
                     dte: float = cell.k * np.dot(edge.unit_normal.flatten(), dT) * edge.L
 
                     if idx_n == -1:
+                        self.bx[i, 0] = F + dp[0, 0]
+                        self.by[i, 0] = F + dp[1, 0]
+                        self.bh[i, 0] = F + dpe + dte
                         pass # TODO
 
                     else:
@@ -177,6 +182,8 @@ class Region:
                 cell.p = cell.rho * cell.T * cell.R
                 for j, (edge, idx_n) in enumerate(zip(cell.edge, cell.neighbour_id)):
                     if idx_n == -1:
+                        self.cells[i].edge[j].U[0, 0] = 0.
+                        self.cells[i].edge[j].U[1, 0] = 0.
                         pass # TODO
                     else:
                         self.cells[i].edge[j].U[0, 0] = (self.xx[i, 0] / self.xm[i, 0] + self.xx[idx_n, 0] / self.xm[idx_n, 0]) / 2
@@ -188,32 +195,20 @@ class Region:
         return True
             
 
-
-if __name__ == "__main__":
-
-    palette: list[str] = ["tab:blue", "tab:orange", "tab:red", "tab:green", "tab:purple", "tab:pink", "tab:brown"] * 10
+def main() -> None:
 
     mesh = Region()
 
-    h: float = 3 ** .5 / 2
+    msh: dict[str, list[float]] = iofc.read_mesh(r"mesh\\coord.json")
 
-    x_lst = [0, 1, 2, -0.5, 0.5, 1.5, 2.5, 0, 1, 2]
-    y_lst = [0, 0, 0, h, h, h, h, 2*h, 2*h, 2*h]
+    X: list[float] = msh["x"]
+    Y: list[float] = msh["y"]
 
-    for i, (x, y) in enumerate(zip(x_lst, y_lst)):
+    for i, (x, y) in enumerate(zip(X, Y)):
         mesh.nodes.append(Node(i, x, y))
 
-    idx: list = [[0, 4, 3],
-                 [0, 1, 4],
-                 [1, 5, 4],
-                 [1, 2, 5],
-                 [2, 6, 5],
-                 [3, 4, 7],
-                 [4, 8, 7],
-                 [4, 5, 8],
-                 [5, 9, 8],
-                 [5, 6, 9]]
-    
+    idx: list[list[int]] = iofc.read_idx(r"mesh\\idx.json")
+
     for i in range(len(idx)):
         p: list[Node] = [mesh.nodes[k] for k in idx[i]]
         mesh.cells.append(Cell(p))
@@ -231,17 +226,18 @@ if __name__ == "__main__":
     mesh.Ah = np.zeros((len(mesh.cells), len(mesh.cells)), dtype=np.float64)
     mesh.bh = np.zeros((len(mesh.cells), 1), dtype=np.float64)
 
-    ed: list[int] = [2, 0, -1, 0, 0, 2, 1, -1, 1, 2] # -1 means no bc on the cell boundary
-    bc: list[int] = [2, 1, 0, 1, 3, 2, 1, 0, 1, 3] # bc identifier
+    case: dict[str, list[int]] = iofc.read_bc(r"case\\bc.json")
+    ed: list[int] = case["edge"] # edge identifier (which edge is on the boundary; -1 means no bc on the cell boundary)
+    bc: list[int] = case["bc"] # bc identifier (which BC is on that edge)
     for i, cell in enumerate(mesh.cells):
         if ed[i] < 0: continue
         cell.edge[ed[i]].bc_id = bc[i]
     
-    # mesh.cells[0].edge[0].bc_id = 1 # no-slip wall
-    # mesh.cells[1].edge[2].bc_id = 2 # inlet
-    # mesh.cells[2].edge[0].bc_id = 3 # outlet
+    # mesh.cells[0].edge[0].bc_id = 1 # no-slip / no-heat-flux wall
+    # mesh.cells[1].edge[2].bc_id = 2 # fluid inlet / heat source
+    # mesh.cells[2].edge[0].bc_id = 3 # fluid outlet / heat sink
 
-    # create all boundary cells
+    # create all boundary cells + assign the values
     bc_cells: list[Cell] = []
     for i in range(3):
         bc_cells.append(Cell([]))
@@ -256,9 +252,13 @@ if __name__ == "__main__":
     bc_cells[1].p = 100000
     bc_cells[1].p = 100000
     
-    mesh.assign_neighbours()
+    mesh.assign_neighbours(bc_cells)
     conv: bool = mesh.iterate_temp_solid(1e-3, 100)
     # conv: bool = mesh.iterate_ico(1e-3, 100)
     print(f"Converged: {conv}")
     mesh.plot()
 
+
+
+if __name__ == "__main__":
+    main()
