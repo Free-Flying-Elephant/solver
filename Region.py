@@ -2,7 +2,6 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy.typing import NDArray
 
 import func as fc
 import iofc
@@ -197,16 +196,19 @@ class Region:
 
 def main() -> None:
 
+    # initialize mesh region (zone)
     mesh = Region()
 
+    # read mesh node positions from file
     msh: dict[str, list[float]] = iofc.read_mesh(r"mesh\\coord.json")
-
     X: list[float] = msh["x"]
     Y: list[float] = msh["y"]
 
+    # initialize nodes and assing coordinates read form file
     for i, (x, y) in enumerate(zip(X, Y)):
         mesh.nodes.append(Node(i, x, y))
 
+    # read vertex indeces
     idx: list[list[int]] = iofc.read_idx(r"mesh\\idx.json")
 
     for i in range(len(idx)):
@@ -226,6 +228,7 @@ def main() -> None:
     mesh.Ah = np.zeros((len(mesh.cells), len(mesh.cells)), dtype=np.float64)
     mesh.bh = np.zeros((len(mesh.cells), 1), dtype=np.float64)
 
+    # read boundary conditions from file
     case: dict[str, list[int]] = iofc.read_bc(r"case\\bc.json")
     ed: list[int] = case["edge"] # edge identifier (which edge is on the boundary; -1 means no bc on the cell boundary)
     bc: list[int] = case["bc"] # bc identifier (which BC is on that edge)
@@ -237,22 +240,29 @@ def main() -> None:
     # mesh.cells[1].edge[2].bc_id = 2 # fluid inlet / heat source
     # mesh.cells[2].edge[0].bc_id = 3 # fluid outlet / heat sink
 
-    # create all boundary cells + assign the values
+    # create all boundary cells
     bc_cells: list[Cell] = []
+    var_dct_cell_lst: list[dict[str, float | int]] = []
     for i in range(3):
         bc_cells.append(Cell([]))
-    bc_cells[1].T = 400
-    bc_cells[2].T = 300
-    bc_cells[0].Qh = 0
-    bc_cells[0].T = 0
-    bc_cells[0].k = 0
-
-    bc_cells[1].U[0, 0] = 1.
-    bc_cells[2].U[0, 0] = 1.
-    bc_cells[1].p = 100000
-    bc_cells[1].p = 100000
+        var_dct_cell_lst.append(fc.cell_inp_var_init(i))
     
+    # assign the values to boundary cells
+    for i in range(3):
+        if iofc.read_inp_file(rf"case\\{i}.inp", var_dct_cell_lst[i]) != 0: raise NameError
+        slots = tuple(bc_cells[i].__slots__)
+        for key, val in var_dct_cell_lst[i].items():
+            if np.isnan(val): continue
+            if key in slots: bc_cells[i].__setattr__(key, val)
+            else:
+                if key == "u": bc_cells[i].U[0, 0] = val
+                elif key == "v": bc_cells[i].U[1, 0] = val
+                else: raise KeyError
+    
+    # assign boundary cell to cell inside region of interest
     mesh.assign_neighbours(bc_cells)
+    
+    # compute the solution + plot the solution
     conv: bool = mesh.iterate_temp_solid(1e-3, 100)
     # conv: bool = mesh.iterate_ico(1e-3, 100)
     print(f"Converged: {conv}")
