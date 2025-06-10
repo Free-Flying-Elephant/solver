@@ -12,7 +12,7 @@ class Edge:
     N2: Node
     bc_id: int = 0 # no bc
     L: float = 0.
-    U: np.ndarray = field(default_factory=lambda: np.zeros((2, 1), dtype=np.float64))
+    U: np.ndarray = field(default_factory=lambda: np.ones((2, 1), dtype=np.float64))
     C: np.ndarray = field(default_factory=lambda: np.zeros((2, 1), dtype=np.float64))
     directional: np.ndarray = field(default_factory=lambda: np.zeros((2, 1), dtype=np.float64))
     normal: np.ndarray = field(default_factory=lambda: np.zeros((2, 1), dtype=np.float64))

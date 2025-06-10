@@ -22,3 +22,10 @@ def gauss_seidel_step(A: NDArray, b: NDArray, x: NDArray, err: NDArray) -> None:
         
     err[0] = np.linalg.norm(x - x_form, ord=np.inf)
 
+
+def matrix_solve(A: NDArray, b: NDArray, x: NDArray, err: NDArray) -> None:
+    x_form: NDArray = x.copy()
+    try: x = np.linalg.solve(A, b)
+    except np.linalg.LinAlgError: x = np.linalg.lstsq(A, b)[0]
+    err[0] = np.linalg.norm(x - x_form, ord=np.inf)
+

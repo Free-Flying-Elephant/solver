@@ -21,12 +21,12 @@ class Cell:
     neighbour: list[Cell] = field(default_factory=lambda: [])
     neighbour_id: list[int] = field(default_factory=lambda: [])
 
-    p: float = 0
+    p: float = 100000
     T: float = 300
     Qh: float = 0
     U: np.ndarray = field(default_factory=lambda: np.zeros((2, 1), dtype=np.float64)) # just for bc usage (as BC cells are without nodes)
 
-    rho: float = 1000
+    rho: float = 1
     k: float = 1 * 1e-2
     gamma: float = 1.4
     R: float = 287.

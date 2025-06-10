@@ -40,9 +40,11 @@ class Region:
     def plot(self) -> None:
         palette: list[str] = ["tab:blue", "tab:orange", "tab:red", "tab:green", "tab:purple", "tab:pink", "tab:brown"] * 10
         plt.figure("error")
-        plt.plot(self.err_seq)
+        # plt.plot(self.err_seq)
+        for memb in self.err_lst:
+            plt.plot(memb)
         plt.yscale("log")
-        plt.xlim(0, len(self.err_seq)-1)
+        plt.xlim(0, len(self.err_lst[0])-1)
         plt.grid(True)
         plt.figure("mesh")
         for node in self.nodes:
@@ -52,7 +54,7 @@ class Region:
         for cell in self.cells:
             k += 1
             plt.plot(cell.centr[0, 0], cell.centr[1, 0], marker="d")
-            plt.annotate(f"{cell.T:.1f}", tuple(cell.centr))
+            plt.annotate(f"T: {cell.T:.1f}; p: {cell.p:.0f}", tuple(cell.centr))
             for edge in cell.edge:
                 plt.plot([edge.N1.x, edge.N2.x], [edge.N1.y, edge.N2.y])
                 plt.plot(edge.C[0, 0], edge.C[1, 0], marker="*")
@@ -126,69 +128,80 @@ class Region:
             if np.max(self.err) <= tol: break
 
             for i, cell in enumerate(self.cells):
-                self.Am[i, i] = 0.
-                self.Ax[i, i] = 0.
-                self.Ay[i, i] = 0.
-                self.Ah[i, i] = 0.
+                # go through all the cells in a region
+                # set every element to zero prior to assigning any other number
+                self.Am[i, :] = 0.
+                self.Ax[i, :] = 0.
+                self.Ay[i, :] = 0.
+                self.Ah[i, :] = 0.
                 self.bm[i, 0] = 0.
                 self.bx[i, 0] = 0.
                 self.by[i, 0] = 0.
                 self.bh[i, 0] = 0.
                 for j, (edge, idx_n) in enumerate(zip(cell.edge, cell.neighbour_id)):
+                    # go through all cell edges and their neighbors
 
-                    dT: np.ndarray = np.asarray([(cell.T - cell.neighbour[j].T) / (cell.centr - cell.neighbour[j].centr)], dtype=np.float64)
+                    dT: float = float(np.linalg.norm(cell.centr - cell.neighbour[j].centr))
 
-                    F: float = (cell.rho + cell.neighbour[j].rho) / 2 * np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L # mass conservation
-                    dp: np.ndarray = -(cell.p + cell.neighbour[j].p) / 2 * edge.unit_normal * edge.L # p * n_ * L
-                    dpe: float = -(cell.p + cell.neighbour[j].p) / 2 * np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L
-                    dte: float = cell.k * np.dot(edge.unit_normal.flatten(), dT) * edge.L
+                    # compute array coefficients
+                    F: float = np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L # mass conservation
+                    dp: np.ndarray = edge.unit_normal * edge.L # p * n_ * L
+                    dpe: float = np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L
+                    dte: float = cell.k * dT * edge.L
+                    # print(f"F: {F:.3e}; dp: {dp[0, 0]:.3e} {dp[1, 0]:.3e}; dpe: {dpe:.3e}; dte: {dte:.3e}")
 
+                    
                     if idx_n == -1:
-                        self.bx[i, 0] = F + dp[0, 0]
-                        self.by[i, 0] = F + dp[1, 0]
-                        self.bh[i, 0] = F + dpe + dte
-                        pass # TODO
+                        self.bm[i, 0] = self.bm[i, 0] + F * cell.neighbour[j].rho
+                        self.bx[i, 0] = self.bx[i, 0] + F * cell.neighbour[j].rho + dp[0, 0] * edge.U[0, 0]
+                        self.by[i, 0] = self.by[i, 0] + F * cell.neighbour[j].rho + dp[1, 0] * edge.U[1, 0]
+                        self.bh[i, 0] = self.bh[i, 0] + F * cell.neighbour[j].rho + dpe * cell.neighbour[j].p + dte * cell.neighbour[j].T
 
                     else:
                         self.Am[i, idx_n] = -F
-                        self.Ax[i, idx_n] = -F
-                        self.Ay[i, idx_n] = -F
-                        self.Ah[i, idx_n] = -F
+                        self.Ax[i, idx_n] = -F - dp[0, 0]
+                        self.Ay[i, idx_n] = -F - dp[1, 0]
+                        self.Ah[i, idx_n] = -F - dpe - dte
 
                     self.Am[i, i] = self.Am[i, i] + F
-                    self.Ax[i, i] = self.Ax[i, i] + F
-                    self.Ay[i, i] = self.Ay[i, i] + F
-                    self.Ah[i, i] = self.Ah[i, i] + F
-                    
-                    self.bx[i, 0] = self.bx[i, 0] + dp[0, 0]
-                    self.by[i, 0] = self.by[i, 0] + dp[1, 0]
-                    self.bh[i, 0] = self.bh[i, 0] + dpe + dte
+                    self.Ax[i, i] = self.Ax[i, i] + F + dp[0, 0]
+                    self.Ay[i, i] = self.Ay[i, i] + F + dp[1, 0]
+                    self.Ah[i, i] = self.Ah[i, i] + F + dpe + dte
             
-            fc.gauss_seidel_step(self.Am, self.bm, self.xm, self.errm)
+            # print(self.Ah, self.bh)
+            # m, n = np.shape(self.Ah)
+            # for mm in range(m):
+            #     for nn in range(n):
+            #         print(f"{self.Ah[mm, nn]:15.3f}", end="")
+            #     print()
+            
+            fc.matrix_solve(self.Am, self.bm, self.xm, self.errm)
             self.err_lst[0].append(self.errm[0])
-            fc.gauss_seidel_step(self.Ax, self.bx, self.xx, self.errx)
+            fc.matrix_solve(self.Ax, self.bx, self.xx, self.errx)
             self.err_lst[1].append(self.errx[0])
-            fc.gauss_seidel_step(self.Ay, self.by, self.xy, self.erry)
+            fc.matrix_solve(self.Ay, self.by, self.xy, self.erry)
             self.err_lst[2].append(self.erry[0])
-            fc.gauss_seidel_step(self.Ah, self.bh, self.xh, self.errh)
+            fc.matrix_solve(self.Ah, self.bh, self.xh, self.errh)
             self.err_lst[3].append(self.errh[0])
 
             self.err = np.asarray([self.errm[0], self.errx[0], self.erry[0], self.errh[0]])
             
             for i, cell in enumerate(self.cells):
-                cell.rho = self.bm[i, 0]
-                cell.T = self.xh[i, 0] / (cell.cp - cell.R) / cell.rho
+                cell.rho = 0.5 * self.xm[i, 0] + 0.5 * cell.rho
+                print(cell.cp, cell.R, cell.rho)
+                cell.T = 0.5 * self.xh[i, 0] / (cell.cp - cell.R) / cell.rho + 0.5 * cell.T
                 cell.p = cell.rho * cell.T * cell.R
                 for j, (edge, idx_n) in enumerate(zip(cell.edge, cell.neighbour_id)):
                     if idx_n == -1:
-                        self.cells[i].edge[j].U[0, 0] = 0.
-                        self.cells[i].edge[j].U[1, 0] = 0.
-                        pass # TODO
-                    else:
                         self.cells[i].edge[j].U[0, 0] = (self.xx[i, 0] / self.xm[i, 0] + self.xx[idx_n, 0] / self.xm[idx_n, 0]) / 2
                         self.cells[i].edge[j].U[1, 0] = (self.xy[i, 0] / self.xm[i, 0] + self.xy[idx_n, 0] / self.xm[idx_n, 0]) / 2
+                        pass # TODO
+                    else:
+                        self.cells[i].edge[j].U[0, 0] # = (self.xx[i, 0] / self.xm[i, 0] + self.xx[idx_n, 0] / self.xm[idx_n, 0]) / 2
+                        self.cells[i].edge[j].U[1, 0] # = (self.xy[i, 0] / self.xm[i, 0] + self.xy[idx_n, 0] / self.xm[idx_n, 0]) / 2
+                print(f"{i}: T: {cell.T:.1f}; p: {cell.p:.1f}; rho: {cell.rho:.2f}")
 
-            print(f"[{iter+1}] : {self.err[0]:.3e} [K]")
+            print(f"[{iter+1}] : {self.err[0]:.3e} [?] {self.err[1]:.3e} [?] {self.err[2]:.3e} [?] {self.err[3]:.3e} [?]")
 
         else: return False
         return True
@@ -263,12 +276,13 @@ def main() -> None:
     mesh.assign_neighbours(bc_cells)
     
     # compute the solution + plot the solution
-    conv: bool = mesh.iterate_temp_solid(1e-3, 100)
-    # conv: bool = mesh.iterate_ico(1e-3, 100)
+    # conv: bool = mesh.iterate_temp_solid(1e-3, 100)
+    conv: bool = mesh.iterate_ico(1e-3, 10)
     print(f"Converged: {conv}")
-    mesh.plot()
+    mesh.plot() # TODO
 
 
 
 if __name__ == "__main__":
     main()
+
