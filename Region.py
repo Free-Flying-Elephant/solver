@@ -130,10 +130,10 @@ class Region:
             for i, cell in enumerate(self.cells):
                 # go through all the cells in a region
                 # set every element to zero prior to assigning any other number
-                self.Am[i, :] = 0.
-                self.Ax[i, :] = 0.
-                self.Ay[i, :] = 0.
-                self.Ah[i, :] = 0.
+                self.Am[i, :] = 0. # mass
+                self.Ax[i, :] = 0. # x-mom
+                self.Ay[i, :] = 0. # y-mom
+                self.Ah[i, :] = 0. # heat
                 self.bm[i, 0] = 0.
                 self.bx[i, 0] = 0.
                 self.by[i, 0] = 0.
@@ -144,11 +144,12 @@ class Region:
                     dT: float = float(np.linalg.norm(cell.centr - cell.neighbour[j].centr))
 
                     # compute array coefficients
-                    F: float = np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L # mass conservation
+                    F: float = cell.rho * np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L
                     dp: np.ndarray = edge.unit_normal * edge.L # p * n_ * L
                     dpe: float = np.dot(edge.unit_normal.flatten(), edge.U.flatten()) * edge.L
                     dte: float = cell.k * dT * edge.L
-                    # print(f"F: {F:.3e}; dp: {dp[0, 0]:.3e} {dp[1, 0]:.3e}; dpe: {dpe:.3e}; dte: {dte:.3e}")
+                    print(cell.rho, np.dot(edge.unit_normal.flatten(), edge.U.flatten()), edge.L)
+                    print(f"F: {F:.3e}; dp: {dp[0, 0]:.3e} {dp[1, 0]:.3e}; dpe: {dpe:.3e}; dte: {dte:.3e}")
 
                     
                     if idx_n == -1:
@@ -163,17 +164,10 @@ class Region:
                         self.Ay[i, idx_n] = -F - dp[1, 0]
                         self.Ah[i, idx_n] = -F - dpe - dte
 
-                    self.Am[i, i] = self.Am[i, i] + F
+                    self.Am[i, i] = self.Am[i, i] - F
                     self.Ax[i, i] = self.Ax[i, i] + F + dp[0, 0]
                     self.Ay[i, i] = self.Ay[i, i] + F + dp[1, 0]
                     self.Ah[i, i] = self.Ah[i, i] + F + dpe + dte
-            
-            # print(self.Ah, self.bh)
-            # m, n = np.shape(self.Ah)
-            # for mm in range(m):
-            #     for nn in range(n):
-            #         print(f"{self.Ah[mm, nn]:15.3f}", end="")
-            #     print()
             
             fc.matrix_solve(self.Am, self.bm, self.xm, self.errm)
             self.err_lst[0].append(self.errm[0])
@@ -184,11 +178,16 @@ class Region:
             fc.matrix_solve(self.Ah, self.bh, self.xh, self.errh)
             self.err_lst[3].append(self.errh[0])
 
+            # m, n = np.shape(self.Am)
+            # for mm in range(m):
+            #     for nn in range(n):
+            #         print(f" {self.Am[mm, nn]:10.3f}", end="")
+            #     print(f" | {self.bm[mm][0]:8.3f} --> {self.xm[mm][0]:8.3f}")
+
             self.err = np.asarray([self.errm[0], self.errx[0], self.erry[0], self.errh[0]])
             
             for i, cell in enumerate(self.cells):
                 cell.rho = 0.5 * self.xm[i, 0] + 0.5 * cell.rho
-                print(cell.cp, cell.R, cell.rho)
                 cell.T = 0.5 * self.xh[i, 0] / (cell.cp - cell.R) / cell.rho + 0.5 * cell.T
                 cell.p = cell.rho * cell.T * cell.R
                 for j, (edge, idx_n) in enumerate(zip(cell.edge, cell.neighbour_id)):
@@ -199,7 +198,7 @@ class Region:
                     else:
                         self.cells[i].edge[j].U[0, 0] # = (self.xx[i, 0] / self.xm[i, 0] + self.xx[idx_n, 0] / self.xm[idx_n, 0]) / 2
                         self.cells[i].edge[j].U[1, 0] # = (self.xy[i, 0] / self.xm[i, 0] + self.xy[idx_n, 0] / self.xm[idx_n, 0]) / 2
-                print(f"{i}: T: {cell.T:.1f}; p: {cell.p:.1f}; rho: {cell.rho:.2f}")
+                # print(f"{i}: T: {cell.T:.1f}; p: {cell.p:.1f}; rho: {cell.rho:.2f}")
 
             print(f"[{iter+1}] : {self.err[0]:.3e} [?] {self.err[1]:.3e} [?] {self.err[2]:.3e} [?] {self.err[3]:.3e} [?]")
 
@@ -277,7 +276,7 @@ def main() -> None:
     
     # compute the solution + plot the solution
     # conv: bool = mesh.iterate_temp_solid(1e-3, 100)
-    conv: bool = mesh.iterate_ico(1e-3, 10)
+    conv: bool = mesh.iterate_ico(1e-3, 1)
     print(f"Converged: {conv}")
     mesh.plot() # TODO
 

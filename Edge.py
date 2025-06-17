@@ -25,5 +25,6 @@ class Edge:
         self.L = float(np.linalg.norm(self.directional))
         self.normal = np.linalg.matmul(np.asarray([[0, 1],[-1 , 0]]), self.directional)
         self.unit_normal = self.normal / np.linalg.norm(self.normal)
+        self.U[1, 0] = 0.
 
 
